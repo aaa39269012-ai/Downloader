@@ -35,11 +35,10 @@
     </select>
     <input type="text" id="filename" value="storytv_full">
 
-    <button id="loadBtn" onclick="loadFFmpeg()">1. Load FFmpeg (~30MB)</button>
-    <button id="btn" onclick="start()" disabled>2. Download & Merge MP4</button>
+    <button id="btn" onclick="start()">Download & Merge MP4</button>
 
     <div class="progress" id="progress"><div class="bar" id="bar"></div></div>
-    <div class="status" id="status">Pehle "Load FFmpeg" dabao</div>
+    <div class="status" id="status">Link daal kar Download par click karein</div>
   </div>
 
   <script>
@@ -47,7 +46,7 @@
 
     const $ = id => document.getElementById(id);
     const statusEl = $('status'), barEl = $('bar'), progressEl =$('progress');
-    const btn = $('btn'), loadBtn =$('loadBtn');
+    const btn = $('btn');
 
     let ffmpeg = null;
 
@@ -57,24 +56,15 @@
     }
 
     async function loadFFmpeg() {
-      loadBtn.disabled = true;
-      setStatus('FFmpeg load ho raha hai...');
+      if (ffmpeg && ffmpeg.isLoaded()) return;
 
-      try {
-        ffmpeg = createFFmpeg({
-          log: true,
-          corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
-        });
+      setStatus('FFmpeg engine load ho raha hai...');
+      ffmpeg = createFFmpeg({
+        log: true,
+        corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+      });
 
-        await ffmpeg.load();
-
-        btn.disabled = false;
-        setStatus('FFmpeg ready! Ab link daal ke Download dabao', 'success');
-      } catch (e) {
-        console.error(e);
-        setStatus('Load error: ' + (e.message || e), 'error');
-        loadBtn.disabled = false;
-      }
+      await ffmpeg.load();
     }
 
     function resolve(base, rel) {
@@ -155,20 +145,21 @@
     }
 
     async function start() {
-      if (!ffmpeg || !ffmpeg.isLoaded()) return setStatus('Pehle FFmpeg load karo', 'error');
-
       const master = $('url').value.trim();
       const quality = $('quality').value;
       let name = $('filename').value.trim() || 'storytv_full';
 
-      if (!master) return setStatus('Link daalo', 'error');
+      if (!master) return setStatus('Pehle master.m3u8 link daalo', 'error');
 
       btn.disabled = true;
       progressEl.style.display = 'block';
       barEl.style.width = '0%';
-      setStatus('Playlists padh raha hoon...');
 
       try {
+        // Auto Load FFmpeg on Download Click
+        await loadFFmpeg();
+
+        setStatus('Playlists process ho rahi hai...');
         const { videoUrl, audioUrl } = await parseMaster(master, quality);
 
         const vInfo = await getSegments(videoUrl);
