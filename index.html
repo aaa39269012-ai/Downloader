@@ -45,6 +45,7 @@
 
   <script>
     const { FFmpeg } = FFmpegWASM;
+    const { toBlobURL } = FFmpegUtil;
 
     const $ = id => document.getElementById(id);
     const statusEl = $('status'), barEl = $('bar'), progressEl =$('progress');
@@ -71,11 +72,11 @@
           }
         });
 
-        // Direct Local Vercel Loading (Super Fast & No CORS Error)
+        // toBlobURL se local Worker error fix ho jayega
         await ffmpeg.load({
-          coreURL: './ffmpeg-core.js',
-          wasmURL: './ffmpeg-core.wasm',
-          classWorkerURL: './814.ffmpeg.js',
+          coreURL: await toBlobURL('./ffmpeg-core.js', 'text/javascript'),
+          wasmURL: await toBlobURL('./ffmpeg-core.wasm', 'application/wasm'),
+          classWorkerURL: await toBlobURL('./814.ffmpeg.js', 'text/javascript'),
         });
 
         loaded = true;
