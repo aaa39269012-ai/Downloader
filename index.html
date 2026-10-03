@@ -72,20 +72,26 @@
           }
         });
 
-        const coreURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
+        const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
         const ffmpegURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd';
 
+        // Worker Cross-Origin fix using Blob + importScripts
+        const workerScript = `importScripts("${ffmpegURL}/814.ffmpeg.js");`;
+        const workerBlob = new Blob([workerScript], { type: 'text/javascript' });
+        const classWorkerURL = URL.createObjectURL(workerBlob);
+
         await ffmpeg.load({
-          coreURL: await toBlobURL(`${coreURL}/ffmpeg-core.js`, 'text/javascript'),
-          wasmURL: await toBlobURL(`${coreURL}/ffmpeg-core.wasm`, 'application/wasm'),
-          classWorkerURL: await toBlobURL(`${ffmpegURL}/814.ffmpeg.js`, 'text/javascript'),
+          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+          classWorkerURL: classWorkerURL,
         });
 
         loaded = true;
         btn.disabled = false;
         setStatus('FFmpeg ready! Ab link daal ke Download dabao', 'success');
       } catch (e) {
-        setStatus('Load error: ' + e.message, 'error');
+        console.error(e);
+        setStatus('Load error: ' + (e.message || e || 'Failed to load FFmpeg worker'), 'error');
         loadBtn.disabled = false;
       }
     }
