@@ -72,12 +72,11 @@
           }
         });
 
-        const base = window.location.origin;
+        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
 
         await ffmpeg.load({
-          coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript'),
-          wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm'),
-          classWorkerURL: await toBlobURL(`${base}/814.ffmpeg.js`, 'text/javascript'),
+          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm')
         });
 
         loaded = true;
