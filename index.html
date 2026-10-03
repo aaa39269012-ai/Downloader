@@ -72,10 +72,11 @@
           }
         });
 
-        const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
-        const ffmpegURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd';
+        // Fast UNPKG CDN URL
+        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+        const ffmpegURL = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd';
 
-        // Worker Cross-Origin fix using Blob + importScripts
+        // Inline Worker Fix for CORS
         const workerScript = `importScripts("${ffmpegURL}/814.ffmpeg.js");`;
         const workerBlob = new Blob([workerScript], { type: 'text/javascript' });
         const classWorkerURL = URL.createObjectURL(workerBlob);
