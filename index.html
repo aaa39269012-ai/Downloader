@@ -36,7 +36,7 @@
     </select>
     <input type="text" id="filename" value="storytv_full">
 
-    <button id="loadBtn" onclick="loadFFmpeg()">1. Load FFmpeg (\~30MB)</button>
+    <button id="loadBtn" onclick="loadFFmpeg()">1. Load FFmpeg (~30MB)</button>
     <button id="btn" onclick="start()" disabled>2. Download & Merge MP4</button>
 
     <div class="progress" id="progress"><div class="bar" id="bar"></div></div>
@@ -48,8 +48,8 @@
     const { fetchFile, toBlobURL } = FFmpegUtil;
 
     const $ = id => document.getElementById(id);
-    const statusEl = $('status'), barEl = $('bar'), progressEl = $('progress');
-    const btn = $('btn'), loadBtn = $('loadBtn');
+    const statusEl = $('status'), barEl = $('bar'), progressEl =$('progress');
+    const btn = $('btn'), loadBtn =$('loadBtn');
 
     let ffmpeg = null;
     let loaded = false;
@@ -76,6 +76,7 @@
         await ffmpeg.load({
           coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
           wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+          classWorkerURL: './814.ffmpeg.js'
         });
 
         loaded = true;
@@ -113,7 +114,6 @@
         if (line.includes('TYPE=AUDIO') && line.includes('URI=')) {
           const m = line.match(/URI="([^"]+)"/);
           if (m) {
-            // prefer 128k
             if (line.includes('128k') || !audioUrl) audioUrl = resolve(masterUrl, m[1]);
           }
         }
@@ -152,7 +152,7 @@
       const parts = [await fetchBin(initUrl)];
       for (let i = 0; i < segments.length; i++) {
         parts.push(await fetchBin(segments[i]));
-        setStatus(`${label} downloading \( {i+1}/ \){segments.length}`);
+        setStatus(`${label} downloading (${i + 1}/${segments.length})`);
       }
       let total = 0;
       for (const p of parts) total += p.length;
@@ -195,7 +195,6 @@
         await ffmpeg.writeFile('video.mp4', videoData);
         await ffmpeg.writeFile('audio.mp4', audioData);
 
-        // Merge without re-encode (fast)
         await ffmpeg.exec([
           '-i', 'video.mp4',
           '-i', 'audio.mp4',
@@ -220,7 +219,6 @@
         setStatus('Done! Full video + audio MP4 download ho gaya', 'success');
         barEl.style.width = '100%';
 
-        // cleanup
         await ffmpeg.deleteFile('video.mp4');
         await ffmpeg.deleteFile('audio.mp4');
         await ffmpeg.deleteFile('output.mp4');
