@@ -4,8 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>StoryTV Full Merger (ffmpeg.wasm)</title>
-  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,sans-serif}
     body{background:#0f0f13;color:#e0e0e0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
@@ -44,15 +43,13 @@
   </div>
 
   <script>
-    const { FFmpeg } = FFmpegWASM;
-    const { toBlobURL } = FFmpegUtil;
+    const { createFFmpeg, fetchFile } = FFmpeg;
 
     const $ = id => document.getElementById(id);
     const statusEl = $('status'), barEl = $('bar'), progressEl =$('progress');
     const btn = $('btn'), loadBtn =$('loadBtn');
 
     let ffmpeg = null;
-    let loaded = false;
 
     function setStatus(msg, type='') {
       statusEl.textContent = msg;
@@ -64,27 +61,13 @@
       setStatus('FFmpeg load ho raha hai...');
 
       try {
-        ffmpeg = new FFmpeg();
-        ffmpeg.on('log', ({ message }) => console.log(message));
-        ffmpeg.on('progress', ({ progress }) => {
-          if (progress > 0 && progress < 1) {
-            barEl.style.width = Math.round(progress * 100) + '%';
-          }
+        ffmpeg = createFFmpeg({
+          log: true,
+          corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
         });
 
-        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-        const workerScriptURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/814.ffmpeg.js';
+        await ffmpeg.load();
 
-        // Fetch worker script and convert to blob to fix CORS worker restriction
-        const classWorkerURL = await toBlobURL(workerScriptURL, 'text/javascript');
-
-        await ffmpeg.load({
-          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-          classWorkerURL: classWorkerURL
-        });
-
-        loaded = true;
         btn.disabled = false;
         setStatus('FFmpeg ready! Ab link daal ke Download dabao', 'success');
       } catch (e) {
@@ -172,7 +155,7 @@
     }
 
     async function start() {
-      if (!loaded) return setStatus('Pehle FFmpeg load karo', 'error');
+      if (!ffmpeg || !ffmpeg.isLoaded()) return setStatus('Pehle FFmpeg load karo', 'error');
 
       const master = $('url').value.trim();
       const quality = $('quality').value;
@@ -198,10 +181,10 @@
         const audioData = await downloadTrack('Audio', aInfo.initUrl, aInfo.segments);
 
         setStatus('FFmpeg mein merge ho raha hai...');
-        await ffmpeg.writeFile('video.mp4', videoData);
-        await ffmpeg.writeFile('audio.mp4', audioData);
+        ffmpeg.FS('writeFile', 'video.mp4', videoData);
+        ffmpeg.FS('writeFile', 'audio.mp4', audioData);
 
-        await ffmpeg.exec([
+        await ffmpeg.run(
           '-i', 'video.mp4',
           '-i', 'audio.mp4',
           '-c', 'copy',
@@ -209,9 +192,9 @@
           '-map', '1:a:0',
           '-shortest',
           'output.mp4'
-        ]);
+        );
 
-        const data = await ffmpeg.readFile('output.mp4');
+        const data = ffmpeg.FS('readFile', 'output.mp4');
         const blob = new Blob([data.buffer], { type: 'video/mp4' });
         const url = URL.createObjectURL(blob);
 
@@ -225,9 +208,9 @@
         setStatus('Done! Full video + audio MP4 download ho gaya', 'success');
         barEl.style.width = '100%';
 
-        await ffmpeg.deleteFile('video.mp4');
-        await ffmpeg.deleteFile('audio.mp4');
-        await ffmpeg.deleteFile('output.mp4');
+        ffmpeg.FS('unlink', 'video.mp4');
+        ffmpeg.FS('unlink', 'audio.mp4');
+        ffmpeg.FS('unlink', 'output.mp4');
 
       } catch (e) {
         console.error(e);
