@@ -72,11 +72,12 @@
           }
         });
 
-        // toBlobURL se local Worker error fix ho jayega
+        const base = window.location.origin;
+
         await ffmpeg.load({
-          coreURL: await toBlobURL('./ffmpeg-core.js', 'text/javascript'),
-          wasmURL: await toBlobURL('./ffmpeg-core.wasm', 'application/wasm'),
-          classWorkerURL: await toBlobURL('./814.ffmpeg.js', 'text/javascript'),
+          coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript'),
+          wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm'),
+          classWorkerURL: await toBlobURL(`${base}/814.ffmpeg.js`, 'text/javascript'),
         });
 
         loaded = true;
