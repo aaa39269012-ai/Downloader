@@ -45,7 +45,6 @@
 
   <script>
     const { FFmpeg } = FFmpegWASM;
-    const { fetchFile, toBlobURL } = FFmpegUtil;
 
     const $ = id => document.getElementById(id);
     const statusEl = $('status'), barEl = $('bar'), progressEl =$('progress');
@@ -61,7 +60,7 @@
 
     async function loadFFmpeg() {
       loadBtn.disabled = true;
-      setStatus('FFmpeg load ho raha hai... (30MB, wait karo)');
+      setStatus('FFmpeg load ho raha hai...');
 
       try {
         ffmpeg = new FFmpeg();
@@ -72,19 +71,11 @@
           }
         });
 
-        // Fast UNPKG CDN URL
-        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-        const ffmpegURL = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd';
-
-        // Inline Worker Fix for CORS
-        const workerScript = `importScripts("${ffmpegURL}/814.ffmpeg.js");`;
-        const workerBlob = new Blob([workerScript], { type: 'text/javascript' });
-        const classWorkerURL = URL.createObjectURL(workerBlob);
-
+        // Direct Local Vercel Loading (Super Fast & No CORS Error)
         await ffmpeg.load({
-          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-          classWorkerURL: classWorkerURL,
+          coreURL: './ffmpeg-core.js',
+          wasmURL: './ffmpeg-core.wasm',
+          classWorkerURL: './814.ffmpeg.js',
         });
 
         loaded = true;
@@ -92,7 +83,7 @@
         setStatus('FFmpeg ready! Ab link daal ke Download dabao', 'success');
       } catch (e) {
         console.error(e);
-        setStatus('Load error: ' + (e.message || e || 'Failed to load FFmpeg worker'), 'error');
+        setStatus('Load error: ' + (e.message || e), 'error');
         loadBtn.disabled = false;
       }
     }
