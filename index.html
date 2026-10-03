@@ -73,10 +73,15 @@
         });
 
         const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+        const workerScriptURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/814.ffmpeg.js';
+
+        // Fetch worker script and convert to blob to fix CORS worker restriction
+        const classWorkerURL = await toBlobURL(workerScriptURL, 'text/javascript');
 
         await ffmpeg.load({
           coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm')
+          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+          classWorkerURL: classWorkerURL
         });
 
         loaded = true;
