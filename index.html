@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Story TV - Fast Direct Downloader</title>
+    <title>Story TV - Standard MP4 Downloader</title>
+    <!-- mux.js Transmuxer for Browser Video Re-indexing -->
+    <script src="https://cdn.jsdelivr.net/npm/mux.js@6.3.0/dist/mux.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
         body { background-color: #0d0f12; color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding-bottom: 30px; user-select: none; }
@@ -70,7 +72,7 @@
 <body>
 
     <div class="app-bar">
-        <div class="app-title">STORY TV - DIRECT MP4 DOWNLOADER</div>
+        <div class="app-title">STORY TV - TRANSMUXED MP4</div>
     </div>
 
     <div class="language-bar">
@@ -489,7 +491,6 @@
             try {
                 let playlistText = await fetchText(m3u8Url);
 
-                // Handle Master/Nested Playlists
                 if (playlistText.includes('.m3u8')) {
                     const lines = playlistText.split('\n');
                     for (let line of lines) {
@@ -521,34 +522,51 @@
                     return;
                 }
 
-                const chunks = [];
+                // Initialize mux.js transmuxer
+                const transmuxer = new muxjs.mp4.Transmuxer({ keepOriginalTimestamps: true });
+                const reindexedSegments = [];
 
-                // Fetch init header fragment if available
+                transmuxer.on('data', (segment) => {
+                    const data = new Uint8Array(segment.initSegment.byteLength + segment.data.byteLength);
+                    data.set(segment.initSegment, 0);
+                    data.set(segment.data, segment.initSegment.byteLength);
+                    reindexedSegments.push(data);
+                });
+
                 if (initUrl) {
-                    dlStatus.textContent = `Downloading Init Header...`;
+                    dlStatus.textContent = `Processing Header...`;
                     const initBuf = await fetchBin(initUrl);
-                    chunks.push(initBuf);
+                    transmuxer.push(initBuf);
                 }
 
-                // Download all video segments directly
                 for (let i = 0; i < segmentUrls.length; i++) {
                     const segBuf = await fetchBin(segmentUrls[i]);
-                    chunks.push(segBuf);
+                    transmuxer.push(segBuf);
+                    transmuxer.flush();
 
                     const progress = Math.round(((i + 1) / segmentUrls.length) * 100);
                     progressBar.style.width = `${progress}%`;
-                    dlStatus.textContent = `Downloading Ep ${epNum}: ${progress}% (${i + 1}/${segmentUrls.length})`;
+                    dlStatus.textContent = `Transmuxing Ep ${epNum}: ${progress}% (${i + 1}/${segmentUrls.length})`;
                 }
 
-                dlStatus.textContent = `Generating MP4 file...`;
+                dlStatus.textContent = `Building MP4 File...`;
 
-                // Native JS Binary Merging (Direct Blob generation)
-                const blob = new Blob(chunks, { type: 'video/mp4' });
+                let finalBlob;
+                if (reindexedSegments.length > 0) {
+                    finalBlob = new Blob(reindexedSegments, { type: 'video/mp4' });
+                } else {
+                    // Raw fallback
+                    const parts = [];
+                    if (initUrl) parts.push(await fetchBin(initUrl));
+                    for (let url of segmentUrls) parts.push(await fetchBin(url));
+                    finalBlob = new Blob(parts, { type: 'video/mp4' });
+                }
+
                 const sanitizedTitle = title.replace(/[^a-zA-Z0-9_-]/g, '_');
                 const fileName = `${sanitizedTitle}_Ep_${epNum}.mp4`;
 
                 const downloadLink = document.createElement('a');
-                downloadLink.href = URL.createObjectURL(blob);
+                downloadLink.href = URL.createObjectURL(finalBlob);
                 downloadLink.download = fileName;
                 
                 document.body.appendChild(downloadLink);
