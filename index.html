@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Story TV - Standard MP4 Downloader</title>
-    <!-- mux.js Transmuxer for Browser Video Re-indexing -->
-    <script src="https://cdn.jsdelivr.net/npm/mux.js@6.3.0/dist/mux.min.js"></script>
+    <title>Story TV - FFmpeg WASM Downloader</title>
+    <!-- FFmpeg.wasm Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
         body { background-color: #0d0f12; color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding-bottom: 30px; user-select: none; }
@@ -72,7 +72,7 @@
 <body>
 
     <div class="app-bar">
-        <div class="app-title">STORY TV - TRANSMUXED MP4</div>
+        <div class="app-title">STORY TV - FFMPEG MP4 MERGER</div>
     </div>
 
     <div class="language-bar">
@@ -115,6 +115,9 @@
     </div>
 
     <script>
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        let ffmpeg = null;
+
         const WORKER_URL = 'https://long-dream-ac6b.aaa39269012.workers.dev/';
         const BASE_API = 'https://storytvreal.vercel.app/feedservice/v1/shows/497?page=0&size=10';
         const SEARCH_API = 'https://storytvreal.vercel.app/searchservice/v1/search/';
@@ -128,6 +131,17 @@
         let currentSearchQuery = '';
         let currentLangId = '';
 
+        async function loadFFmpeg() {
+            if (ffmpeg && ffmpeg.isLoaded()) return;
+            const dlStatus = document.getElementById('dlStatus');
+            dlStatus.textContent = 'FFmpeg engine load ho raha hai...';
+            ffmpeg = createFFmpeg({
+                log: false,
+                corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+            });
+            await ffmpeg.load();
+        }
+
         function resolveUrl(base, rel) {
             try { return new URL(rel, base).href; } catch { return rel; }
         }
@@ -140,7 +154,7 @@
 
         async function fetchBin(url) {
             const r = await fetch(`${WORKER_URL}?url=${encodeURIComponent(url)}`);
-            if (!r.ok) throw new Error('Segment HTTP ' + r.status);
+            if (!r.ok) throw new Error('Segment ' + r.status);
             return new Uint8Array(await r.arrayBuffer());
         }
 
@@ -479,6 +493,64 @@
             }
         }
 
+        async function getSegments(playlistUrl) {
+            let playlistText = await fetchText(playlistUrl);
+
+            if (playlistText.includes('.m3u8')) {
+                const lines = playlistText.split('\n');
+                for (let line of lines) {
+                    line = line.trim();
+                    if (line && !line.startsWith('#')) {
+                        playlistUrl = resolveUrl(playlistUrl, line);
+                        playlistText = await fetchText(playlistUrl);
+                        break;
+                    }
+                }
+            }
+
+            const lines = playlistText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+            let initUrl = null;
+            const segments = [];
+
+            for (const line of lines) {
+                if (line.startsWith('#EXT-X-MAP:')) {
+                    const m = line.match(/URI="([^"]+)"/);
+                    if (m) initUrl = resolveUrl(playlistUrl, m[1]);
+                } else if (line && !line.startsWith('#')) {
+                    segments.push(resolveUrl(playlistUrl, line));
+                }
+            }
+            return { initUrl, segments };
+        }
+
+        async function downloadTrack(label, initUrl, segments, epNum) {
+            const dlStatus = document.getElementById('dlStatus');
+            const progressBar = document.getElementById('progressBar');
+            
+            const parts = [];
+            if (initUrl) {
+                dlStatus.textContent = `${label} Header Download...`;
+                parts.push(await fetchBin(initUrl));
+            }
+
+            for (let i = 0; i < segments.length; i++) {
+                parts.push(await fetchBin(segments[i]));
+                const progress = Math.round(((i + 1) / segments.length) * 100);
+                progressBar.style.width = `${progress}%`;
+                dlStatus.textContent = `${label} Downloading Ep ${epNum}: ${progress}% (${i + 1}/${segments.length})`;
+            }
+
+            let total = 0;
+            for (const p of parts) total += p.length;
+            const out = new Uint8Array(total);
+            let offset = 0;
+            for (const p of parts) {
+                out.set(p, offset);
+                offset += p.length;
+            }
+            return out;
+        }
+
         async function startM3u8Download(m3u8Url, title, epNum) {
             const dlStatus = document.getElementById('dlStatus');
             const progressBarContainer = document.getElementById('progressBarContainer');
@@ -486,87 +558,45 @@
             
             progressBarContainer.style.display = 'block';
             progressBar.style.width = '0%';
-            dlStatus.textContent = `Fetching M3U8 Playlist...`;
 
             try {
-                let playlistText = await fetchText(m3u8Url);
+                // 1. FFmpeg Load
+                await loadFFmpeg();
 
-                if (playlistText.includes('.m3u8')) {
-                    const lines = playlistText.split('\n');
-                    for (let line of lines) {
-                        line = line.trim();
-                        if (line && !line.startsWith('#')) {
-                            m3u8Url = resolveUrl(m3u8Url, line);
-                            playlistText = await fetchText(m3u8Url);
-                            break;
-                        }
-                    }
+                // 2. Extract Segments
+                dlStatus.textContent = `Playlist parse ho raha hai...`;
+                const vInfo = await getSegments(m3u8Url);
+
+                if (vInfo.segments.length === 0) {
+                    throw new Error('No video segments found');
                 }
 
-                const lines = playlistText.split('\n');
-                let initUrl = null;
-                const segmentUrls = [];
+                // 3. Download Track
+                const videoData = await downloadTrack('Video', vInfo.initUrl, vInfo.segments, epNum);
 
-                for (let line of lines) {
-                    line = line.trim();
-                    if (line.startsWith('#EXT-X-MAP:')) {
-                        const match = line.match(/URI="([^"]+)"/);
-                        if (match) initUrl = resolveUrl(m3u8Url, match[1]);
-                    } else if (line && !line.startsWith('#')) {
-                        segmentUrls.push(resolveUrl(m3u8Url, line));
-                    }
-                }
+                // 4. Write to FFmpeg Virtual File System
+                dlStatus.textContent = `FFmpeg memory mein write ho raha hai...`;
+                ffmpeg.FS('writeFile', 'input.mp4', videoData);
 
-                if (segmentUrls.length === 0) {
-                    dlStatus.textContent = 'Error: No video segments found!';
-                    return;
-                }
+                // 5. Run FFmpeg Transmux with FastStart Fix
+                dlStatus.textContent = `MP4 Metadata Re-indexing (FastStart)...`;
+                await ffmpeg.run(
+                    '-i', 'input.mp4',
+                    '-c', 'copy',
+                    '-movflags', '+faststart',
+                    'output.mp4'
+                );
 
-                // Initialize mux.js transmuxer
-                const transmuxer = new muxjs.mp4.Transmuxer({ keepOriginalTimestamps: true });
-                const reindexedSegments = [];
+                // 6. Read Final Playable File
+                const data = ffmpeg.FS('readFile', 'output.mp4');
+                const blob = new Blob([data.buffer], { type: 'video/mp4' });
 
-                transmuxer.on('data', (segment) => {
-                    const data = new Uint8Array(segment.initSegment.byteLength + segment.data.byteLength);
-                    data.set(segment.initSegment, 0);
-                    data.set(segment.data, segment.initSegment.byteLength);
-                    reindexedSegments.push(data);
-                });
-
-                if (initUrl) {
-                    dlStatus.textContent = `Processing Header...`;
-                    const initBuf = await fetchBin(initUrl);
-                    transmuxer.push(initBuf);
-                }
-
-                for (let i = 0; i < segmentUrls.length; i++) {
-                    const segBuf = await fetchBin(segmentUrls[i]);
-                    transmuxer.push(segBuf);
-                    transmuxer.flush();
-
-                    const progress = Math.round(((i + 1) / segmentUrls.length) * 100);
-                    progressBar.style.width = `${progress}%`;
-                    dlStatus.textContent = `Transmuxing Ep ${epNum}: ${progress}% (${i + 1}/${segmentUrls.length})`;
-                }
-
-                dlStatus.textContent = `Building MP4 File...`;
-
-                let finalBlob;
-                if (reindexedSegments.length > 0) {
-                    finalBlob = new Blob(reindexedSegments, { type: 'video/mp4' });
-                } else {
-                    // Raw fallback
-                    const parts = [];
-                    if (initUrl) parts.push(await fetchBin(initUrl));
-                    for (let url of segmentUrls) parts.push(await fetchBin(url));
-                    finalBlob = new Blob(parts, { type: 'video/mp4' });
-                }
-
+                // 7. Download Video File
                 const sanitizedTitle = title.replace(/[^a-zA-Z0-9_-]/g, '_');
                 const fileName = `${sanitizedTitle}_Ep_${epNum}.mp4`;
 
                 const downloadLink = document.createElement('a');
-                downloadLink.href = URL.createObjectURL(finalBlob);
+                downloadLink.href = URL.createObjectURL(blob);
                 downloadLink.download = fileName;
                 
                 document.body.appendChild(downloadLink);
@@ -577,10 +607,15 @@
                     URL.revokeObjectURL(downloadLink.href);
                 }, 2000);
 
+                // Cleanup FFmpeg virtual memory
+                ffmpeg.FS('unlink', 'input.mp4');
+                ffmpeg.FS('unlink', 'output.mp4');
+
                 progressBar.style.width = '100%';
-                dlStatus.textContent = `Episode ${epNum} Download Completed!`;
+                dlStatus.textContent = `Episode ${epNum} Download Completed & Playable!`;
 
             } catch (err) {
+                console.error(err);
                 dlStatus.textContent = `Download Error: ${err.message}`;
             }
         }
