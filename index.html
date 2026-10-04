@@ -1,88 +1,194 @@
 <!DOCTYPE html>
-<html lang="hi">
+<html lang="hi" class="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>StoryTV Full Merger (ffmpeg.wasm)</title>
+  <title>DramaFlix - Modern Player & MP4 Downloader</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              500: '#6c5ce7',
+              600: '#5b4bc4',
+              700: '#4a3ab1'
+            },
+            dark: {
+              800: '#1a1a22',
+              900: '#0f0f13',
+              card: '#181824',
+              border: '#262636'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- FFmpeg.wasm for MP4 Merging -->
   <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+  
+  <!-- Video.js CSS & JS for HLS Playback -->
+  <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
+  <script src="https://vjs.zencdn.net/8.3.0/video.min.js"></script>
+
   <style>
-    *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,sans-serif}
-    body{background:#0f0f13;color:#e0e0e0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
-    .box{background:#1a1a22;border-radius:16px;padding:24px;width:100%;max-width:480px}
-    h1{font-size:18px;color:#fff;margin-bottom:6px}
-    p{font-size:13px;color:#888;margin-bottom:16px}
-    input,select{width:100%;padding:12px 14px;border-radius:10px;border:none;background:#2a2a35;color:#fff;font-size:14px;margin-bottom:10px}
-    button{width:100%;padding:14px;border-radius:10px;border:none;background:#6c5ce7;color:#fff;font-size:15px;font-weight:600;margin-bottom:8px;cursor:pointer}
-    button:disabled{background:#444;cursor:not-allowed}
-    .progress{height:8px;background:#2a2a35;border-radius:4px;overflow:hidden;margin:14px 0 8px;display:none}
-    .bar{height:100%;background:#6c5ce7;width:0%;transition:width .2s}
-    .status{font-size:13px;color:#aaa;min-height:20px;word-break:break-all}
-    .error{color:#ff6b6b}
-    .success{color:#2ecc71}
+    body { font-family: system-ui, -apple-system, sans-serif; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .glass { background: rgba(26, 26, 34, 0.8); backdrop-filter: blur(12px); }
   </style>
 </head>
-<body>
-  <div class="box">
-    <h1>StoryTV Full MP4 (Video + Audio)</h1>
-    <p>ffmpeg.wasm se merge hoga → ek complete file</p>
+<body class="bg-dark-900 text-gray-100 min-h-screen pb-10">
 
-    <input type="text" id="url" placeholder="master.m3u8 link paste karo">
-    <select id="quality">
-      <option value="720p" selected>720p</option>
-      <option value="1080p">1080p</option>
-      <option value="480p">480p</option>
-      <option value="360p">360p</option>
-    </select>
-    <input type="text" id="filename" value="storytv_full">
+  <!-- Header Navigation -->
+  <header class="sticky top-0 z-40 glass border-b border-dark-border px-4 py-3">
+    <div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
+      <div class="flex items-center space-x-2 cursor-pointer" onclick="showHome()">
+        <div class="w-9 h-9 rounded-xl bg-brand-500 flex items-center justify-center font-bold text-white text-xl shadow-lg">D</div>
+        <span class="text-xl font-extrabold tracking-wider text-white">DRAMA<span class="text-brand-500">FLIX</span></span>
+      </div>
 
-    <button id="btn" onclick="start()">Download & Merge MP4</button>
+      <div class="flex items-center space-x-2 flex-1 max-w-md">
+        <input type="text" id="searchInput" placeholder="Search dramas..." 
+          class="w-full bg-dark-800 text-xs sm:text-sm px-4 py-2 rounded-xl border border-dark-border focus:outline-none focus:border-brand-500 transition">
+        <button onclick="handleSearch()" class="bg-brand-500 hover:bg-brand-600 text-white px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl transition flex-none">
+          Search
+        </button>
+      </div>
+    </div>
+  </header>
 
-    <div class="progress" id="progress"><div class="bar" id="bar"></div></div>
-    <div class="status" id="status">Link daal kar Download par click karein</div>
+  <!-- App Main Area -->
+  <main id="appContainer" class="max-w-7xl mx-auto px-4 pt-6">
+    <div id="loader" class="flex flex-col items-center justify-center py-32 space-y-4">
+      <div class="w-10 h-10 border-4 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
+      <p class="text-sm text-gray-400">Loading layout...</p>
+    </div>
+  </main>
+
+  <!-- Custom Range Modal -->
+  <div id="customModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-dark-card border border-dark-border p-6 rounded-2xl w-full max-w-md shadow-2xl">
+      <h3 class="text-lg font-bold text-white mb-1">Custom Download Range</h3>
+      <p class="text-xs text-gray-400 mb-4">Quality select karke range ya episodes enter karein:</p>
+      
+      <div class="space-y-4">
+        <div>
+          <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Quality Select</label>
+          <select id="customQuality" class="w-full bg-dark-900 border border-dark-border rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-brand-500">
+            <option value="720p" selected>720p</option>
+            <option value="1080p">1080p</option>
+            <option value="480p">480p</option>
+            <option value="360p">360p</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Pattern Format</label>
+          <input type="text" id="customInput" placeholder="e.g. 1-5, 8, 10, 12-15" 
+            class="w-full bg-dark-900 border border-dark-border rounded-xl p-3 text-sm text-white focus:outline-none focus:border-brand-500 transition">
+        </div>
+      </div>
+
+      <div class="flex justify-end space-x-3 mt-6">
+        <button onclick="closeCustomModal()" class="px-4 py-2 bg-dark-800 hover:bg-dark-border text-xs font-semibold rounded-xl text-gray-300">Cancel</button>
+        <button onclick="startCustomDownload()" class="px-5 py-2 bg-brand-500 hover:bg-brand-600 text-xs font-semibold rounded-xl text-white">Start Download</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Download Status Toast Panel -->
+  <div id="downloadToast" class="fixed bottom-5 right-5 bg-dark-card border border-dark-border p-4 rounded-2xl shadow-2xl z-50 hidden flex flex-col space-y-2 max-w-sm w-full">
+    <div class="flex items-center space-x-3">
+      <div class="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin flex-none"></div>
+      <div>
+        <h4 id="toastTitle" class="text-xs font-bold text-white">FFmpeg Engine...</h4>
+        <p id="toastSub" class="text-[10px] text-gray-400">Processing video & audio segments</p>
+      </div>
+    </div>
+    <div class="w-full bg-dark-800 h-2 rounded-full overflow-hidden mt-2">
+      <div id="progressBar" class="bg-brand-500 h-full w-0 transition-all duration-200"></div>
+    </div>
+  </div>
+
+  <!-- Video Player Overlay -->
+  <div id="playerOverlay" class="fixed inset-0 bg-black z-50 hidden flex flex-col items-center justify-center">
+    <button onclick="closePlayer()" class="absolute top-4 left-4 z-20 bg-dark-card/80 text-white p-2.5 rounded-full border border-dark-border backdrop-blur">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+    </button>
+    
+    <div class="w-full max-w-md h-full relative flex items-center justify-center bg-black">
+      <video id="shortVideoPlayer" class="video-js vjs-default-skin w-full h-full object-cover"></video>
+      
+      <div class="absolute bottom-6 left-4 right-4 flex justify-between items-center z-10 pointer-events-none">
+        <div id="playerInfo" class="text-sm font-bold bg-dark-card/80 backdrop-blur px-3 py-1.5 rounded-lg border border-dark-border">Episode 1</div>
+        <div class="flex space-x-2 pointer-events-auto">
+          <button onclick="changeEpisode(-1)" class="bg-dark-card/80 px-3 py-1.5 rounded-lg border border-dark-border text-xs">Prev</button>
+          <button onclick="changeEpisode(1)" class="bg-brand-500 px-3 py-1.5 rounded-lg text-xs font-semibold">Next</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
-    const { createFFmpeg, fetchFile } = FFmpeg;
+    const PROXY_BASE = "https://long-dream-ac6b.aaa39269012.workers.dev/?url=";
+    const BASE_API = "https://storytvreal.vercel.app";
 
-    const $ = id => document.getElementById(id);
-    const statusEl = $('status'), barEl = $('bar'), progressEl =$('progress');
-    const btn = $('btn');
-
+    const { createFFmpeg } = FFmpeg;
     let ffmpeg = null;
 
-    function setStatus(msg, type='') {
-      statusEl.textContent = msg;
-      statusEl.className = 'status ' + type;
+    let currentShow = null;
+    let cachedEpisodeUrls = {};
+    let currentEpIndex = 1;
+    let playerInstance = null;
+    let isDownloading = false;
+
+    function buildUrl(endpoint) {
+      return PROXY_BASE + encodeURIComponent(BASE_API + endpoint);
     }
 
+    window.addEventListener('DOMContentLoaded', () => {
+      showHome();
+      initPlayer();
+    });
+
+    // --------- FFmpeg Engine Initialization ---------
     async function loadFFmpeg() {
       if (ffmpeg && ffmpeg.isLoaded()) return;
-
-      setStatus('FFmpeg engine load ho raha hai...');
+      updateStatus('FFmpeg load ho raha hai...', 10);
+      
       ffmpeg = createFFmpeg({
         log: true,
-        corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+        // Relative path used to load local files listed in repo screenshot
+        corePath: './ffmpeg-core.js'
       });
 
       await ffmpeg.load();
     }
 
-    function resolve(base, rel) {
+    function resolveUrl(base, rel) {
       try { return new URL(rel, base).href; } catch { return rel; }
     }
 
     async function fetchText(url) {
-      const r = await fetch(url);
+      const r = await fetch(PROXY_BASE + encodeURIComponent(url));
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.text();
     }
 
     async function fetchBin(url) {
-      const r = await fetch(url);
+      const r = await fetch(PROXY_BASE + encodeURIComponent(url));
       if (!r.ok) throw new Error('Segment ' + r.status);
       return new Uint8Array(await r.arrayBuffer());
     }
 
+    // Parse master m3u8 playlist to extract quality specific track URLs
     async function parseMaster(masterUrl, quality) {
       const text = await fetchText(masterUrl);
       const lines = text.split(/\r?\n/).map(l => l.trim());
@@ -93,19 +199,28 @@
         if (line.includes('TYPE=AUDIO') && line.includes('URI=')) {
           const m = line.match(/URI="([^"]+)"/);
           if (m) {
-            if (line.includes('128k') || !audioUrl) audioUrl = resolve(masterUrl, m[1]);
+            if (line.includes('128k') || !audioUrl) audioUrl = resolveUrl(masterUrl, m[1]);
           }
         }
       }
 
       for (let i = 0; i < lines.length; i++) {
         if (lines[i+1] && lines[i+1].includes(quality + '/')) {
-          videoUrl = resolve(masterUrl, lines[i+1]);
+          videoUrl = resolveUrl(masterUrl, lines[i+1]);
           break;
         }
       }
 
-      if (!videoUrl || !audioUrl) throw new Error('Video/Audio playlist nahi mila');
+      if (!videoUrl) {
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i] && !lines[i].startsWith('#')) {
+            videoUrl = resolveUrl(masterUrl, lines[i]);
+            break;
+          }
+        }
+      }
+
+      if (!videoUrl || !audioUrl) throw new Error('Video ya Audio playlist load nahi hui');
       return { videoUrl, audioUrl };
     }
 
@@ -118,12 +233,12 @@
       for (const line of lines) {
         if (line.startsWith('#EXT-X-MAP:')) {
           const m = line.match(/URI="([^"]+)"/);
-          if (m) initUrl = resolve(playlistUrl, m[1]);
+          if (m) initUrl = resolveUrl(playlistUrl, m[1]);
         } else if (line && !line.startsWith('#')) {
-          segments.push(resolve(playlistUrl, line));
+          segments.push(resolveUrl(playlistUrl, line));
         }
       }
-      if (!initUrl) throw new Error('init.mp4 nahi mila');
+      if (!initUrl) throw new Error('init.mp4 file miss ho gai');
       return { initUrl, segments };
     }
 
@@ -131,7 +246,8 @@
       const parts = [await fetchBin(initUrl)];
       for (let i = 0; i < segments.length; i++) {
         parts.push(await fetchBin(segments[i]));
-        setStatus(`${label} downloading (${i + 1}/${segments.length})`);
+        const percent = Math.floor(((i + 1) / segments.length) * 100);
+        updateStatus(`${label} Segment Download (${i + 1}/${segments.length})`, percent);
       }
       let total = 0;
       for (const p of parts) total += p.length;
@@ -144,70 +260,316 @@
       return out;
     }
 
-    async function start() {
-      const master = $('url').value.trim();
-      const quality = $('quality').value;
-      let name = $('filename').value.trim() || 'storytv_full';
+    // --------- MP4 FFmpeg Merger ---------
+    async function processAndMergeMp4(masterM3u8Url, quality, outputName) {
+      await loadFFmpeg();
 
-      if (!master) return setStatus('Pehle master.m3u8 link daalo', 'error');
+      updateStatus('Playlist parse ho rahi hai...', 20);
+      const { videoUrl, audioUrl } = await parseMaster(masterM3u8Url, quality);
 
-      btn.disabled = true;
-      progressEl.style.display = 'block';
-      barEl.style.width = '0%';
+      const vInfo = await getSegments(videoUrl);
+      const aInfo = await getSegments(audioUrl);
+
+      updateStatus('Video segments download shuru...', 30);
+      const videoData = await downloadTrack('Video', vInfo.initUrl, vInfo.segments);
+
+      updateStatus('Audio segments download shuru...', 60);
+      const audioData = await downloadTrack('Audio', aInfo.initUrl, aInfo.segments);
+
+      updateStatus('FFmpeg merging into single MP4...', 85);
+      ffmpeg.FS('writeFile', 'video.mp4', videoData);
+      ffmpeg.FS('writeFile', 'audio.mp4', audioData);
+
+      await ffmpeg.run(
+        '-i', 'video.mp4',
+        '-i', 'audio.mp4',
+        '-c', 'copy',
+        '-map', '0:v:0',
+        '-map', '1:a:0',
+        '-shortest',
+        'output.mp4'
+      );
+
+      const data = ffmpeg.FS('readFile', 'output.mp4');
+      const blob = new Blob([data.buffer], { type: 'video/mp4' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = outputName + '.mp4';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      ffmpeg.FS('unlink', 'video.mp4');
+      ffmpeg.FS('unlink', 'audio.mp4');
+      ffmpeg.FS('unlink', 'output.mp4');
+
+      updateStatus('Complete MP4 Downloaded!', 100);
+    }
+
+    function updateStatus(text, progress) {
+      document.getElementById('toastTitle').innerText = text;
+      document.getElementById('progressBar').style.width = progress + '%';
+    }
+
+    // --------- App UI & Navigation ---------
+    async function showHome() {
+      const container = document.getElementById('appContainer');
+      container.innerHTML = `
+        <div class="flex flex-col items-center justify-center py-32 space-y-4">
+          <div class="w-10 h-10 border-4 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
+          <p class="text-sm text-gray-400 font-medium">Fetching Homepage...</p>
+        </div>`;
+      
+      try {
+        const res = await fetch(buildUrl('/feedservice/v1/homepage/struct'));
+        const json = await res.json();
+        const sections = json.data?.sections || [];
+        
+        container.innerHTML = '';
+        for (let section of sections) {
+          renderCategorySection(container, section);
+        }
+      } catch (err) {
+        container.innerHTML = `<div class="text-red-500 text-center py-20">Error loading home screen.</div>`;
+      }
+    }
+
+    async function renderCategorySection(parentEl, section) {
+      const secDiv = document.createElement('div');
+      secDiv.className = 'mb-8';
+      secDiv.innerHTML = `
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+            <span class="w-1 h-4 bg-brand-500 rounded-full"></span>
+            ${section.text || 'Collection'}
+          </h2>
+        </div>
+        <div id="cat-list-${section.id}" class="flex space-x-4 overflow-x-auto no-scrollbar py-2">
+          <div class="text-xs text-gray-500">Loading shows...</div>
+        </div>
+      `;
+      parentEl.appendChild(secDiv);
 
       try {
-        // Auto Load FFmpeg on Download Click
-        await loadFFmpeg();
-
-        setStatus('Playlists process ho rahi hai...');
-        const { videoUrl, audioUrl } = await parseMaster(master, quality);
-
-        const vInfo = await getSegments(videoUrl);
-        const aInfo = await getSegments(audioUrl);
-
-        setStatus('Video download shuru...');
-        const videoData = await downloadTrack('Video', vInfo.initUrl, vInfo.segments);
-
-        setStatus('Audio download shuru...');
-        const audioData = await downloadTrack('Audio', aInfo.initUrl, aInfo.segments);
-
-        setStatus('FFmpeg mein merge ho raha hai...');
-        ffmpeg.FS('writeFile', 'video.mp4', videoData);
-        ffmpeg.FS('writeFile', 'audio.mp4', audioData);
-
-        await ffmpeg.run(
-          '-i', 'video.mp4',
-          '-i', 'audio.mp4',
-          '-c', 'copy',
-          '-map', '0:v:0',
-          '-map', '1:a:0',
-          '-shortest',
-          'output.mp4'
-        );
-
-        const data = ffmpeg.FS('readFile', 'output.mp4');
-        const blob = new Blob([data.buffer], { type: 'video/mp4' });
-        const url = URL.createObjectURL(blob);
-
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = name + '.mp4';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-
-        setStatus('Done! Full video + audio MP4 download ho gaya', 'success');
-        barEl.style.width = '100%';
-
-        ffmpeg.FS('unlink', 'video.mp4');
-        ffmpeg.FS('unlink', 'audio.mp4');
-        ffmpeg.FS('unlink', 'output.mp4');
-
+        const res = await fetch(buildUrl(`/feedservice/v1/shows/${section.id}?page=0&size=10`));
+        const data = await res.json();
+        const shows = data.data?.content || [];
+        
+        const listEl = document.getElementById(`cat-list-${section.id}`);
+        listEl.innerHTML = '';
+        shows.forEach(show => listEl.appendChild(createShowCard(show)));
       } catch (e) {
         console.error(e);
-        setStatus('Error: ' + e.message, 'error');
-      } finally {
-        btn.disabled = false;
+      }
+    }
+
+    function createShowCard(show) {
+      const card = document.createElement('div');
+      card.className = 'flex-none w-36 sm:w-44 cursor-pointer group';
+      card.onclick = (e) => {
+        e.stopPropagation();
+        openShowDetail(show);
+      };
+
+      card.innerHTML = `
+        <div class="relative aspect-[3/4] rounded-2xl overflow-hidden bg-dark-card border border-dark-border mb-2.5">
+          <img src="${show.imageUrl}" alt="${show.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
+          <span class="absolute bottom-2 right-2 bg-dark-900/80 text-[10px] px-2 py-0.5 rounded-md text-gray-300 border border-dark-border">
+            ${show.watchInfo?.vc || '0'}
+          </span>
+        </div>
+        <h3 class="text-xs font-semibold text-gray-200 line-clamp-1">${show.title}</h3>
+        <p class="text-[10px] text-gray-500">${show.watchInfo?.totalEpisodes || '0'} Episodes</p>
+      `;
+      return card;
+    }
+
+    function openShowDetail(show) {
+      currentShow = show;
+      cachedEpisodeUrls = {};
+      const totalEpisodes = parseInt(show.watchInfo?.totalEpisodes || 0);
+
+      const container = document.getElementById('appContainer');
+      container.innerHTML = `
+        <div class="bg-dark-card border border-dark-border rounded-3xl p-5 mb-8">
+          <div class="flex flex-col sm:flex-row gap-5">
+            <img src="${show.imageUrl}" class="w-28 h-38 sm:w-36 sm:h-48 object-cover rounded-2xl border border-dark-border">
+            <div class="flex-1 flex flex-col justify-between space-y-4">
+              <div>
+                <h2 class="text-xl sm:text-2xl font-extrabold text-white">${show.title}</h2>
+                <div class="flex items-center gap-4 text-xs text-gray-400 mt-2">
+                  <span>• ${totalEpisodes} Episodes</span>
+                  <span>• ${show.watchInfo?.vc || 'N/A'} Views</span>
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-2.5 pt-2">
+                <button onclick="event.stopPropagation(); playEpisode(1)" class="bg-brand-500 hover:bg-brand-600 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition">
+                  ▶ Play Ep 1
+                </button>
+                <button onclick="event.stopPropagation(); downloadAllEpisodes()" class="bg-dark-800 border border-dark-border text-gray-200 px-4 py-2.5 rounded-xl text-xs font-semibold">
+                  ⬇ Download All (MP4)
+                </button>
+                <button onclick="event.stopPropagation(); openCustomModal()" class="bg-dark-800 border border-dark-border text-gray-200 px-4 py-2.5 rounded-xl text-xs font-semibold">
+                  ⚙ Custom Range
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <h3 class="text-sm font-bold text-white uppercase mb-4">Episodes Grid</h3>
+        <div id="episodesGrid" class="grid grid-cols-4 sm:grid-cols-8 md:grid-cols-10 gap-2.5"></div>
+      `;
+
+      const grid = document.getElementById('episodesGrid');
+      for (let i = 1; i <= totalEpisodes; i++) {
+        const epBtn = document.createElement('button');
+        epBtn.className = 'bg-dark-card border border-dark-border py-3 rounded-xl text-xs font-semibold text-gray-300 hover:bg-brand-500 hover:text-white transition';
+        epBtn.innerText = i;
+        epBtn.onclick = (e) => {
+          e.stopPropagation();
+          playEpisode(i);
+        };
+        grid.appendChild(epBtn);
+      }
+    }
+
+    async function fetchEpisodeUrl(epIndex) {
+      if (cachedEpisodeUrls[epIndex]) return cachedEpisodeUrls[epIndex];
+
+      const cursor = Math.floor((epIndex - 1) / 5) * 5;
+      const targetUrl = `/feedservice/v1/episode/metadata/${currentShow.id}?cursor=${cursor}&dir=NEXT`;
+      
+      try {
+        const res = await fetch(buildUrl(targetUrl));
+        const data = await res.json();
+        
+        const episodes = data.data?.content || [];
+        episodes.forEach(item => {
+          cachedEpisodeUrls[item.index] = item.epsUrl;
+        });
+
+        return cachedEpisodeUrls[epIndex] || null;
+      } catch (err) {
+        console.error(err);
+        return null;
+      }
+    }
+
+    // --------- Player Controls ---------
+    function initPlayer() {
+      playerInstance = videojs('shortVideoPlayer', { controls: true, autoplay: true });
+      playerInstance.on('ended', () => {
+        const totalEps = parseInt(currentShow.watchInfo?.totalEpisodes || 0);
+        if (currentEpIndex < totalEps) changeEpisode(1);
+      });
+    }
+
+    async function playEpisode(epIndex) {
+      currentEpIndex = epIndex;
+      document.getElementById('playerOverlay').classList.remove('hidden');
+      document.getElementById('playerInfo').innerText = `Episode ${epIndex}`;
+
+      const m3u8Url = await fetchEpisodeUrl(epIndex);
+      if (m3u8Url) {
+        playerInstance.src({ src: PROXY_BASE + encodeURIComponent(m3u8Url), type: 'application/x-mpegURL' });
+        playerInstance.play();
+      }
+    }
+
+    function changeEpisode(offset) {
+      const totalEps = parseInt(currentShow.watchInfo?.totalEpisodes || 0);
+      const targetIndex = currentEpIndex + offset;
+      if (targetIndex >= 1 && targetIndex <= totalEps) playEpisode(targetIndex);
+    }
+
+    function closePlayer() {
+      playerInstance.pause();
+      document.getElementById('playerOverlay').classList.add('hidden');
+    }
+
+    // --------- Downloader Trigger Handles ---------
+    async function downloadAllEpisodes() {
+      const totalEps = parseInt(currentShow.watchInfo?.totalEpisodes || 0);
+      const epList = Array.from({ length: totalEps }, (_, i) => i + 1);
+      startSequentialDownload(epList, '720p');
+    }
+
+    function openCustomModal() { document.getElementById('customModal').classList.remove('hidden'); }
+    function closeCustomModal() { document.getElementById('customModal').classList.add('hidden'); }
+
+    function startCustomDownload() {
+      const input = document.getElementById('customInput').value;
+      const quality = document.getElementById('customQuality').value;
+      const epList = parseCustomInput(input);
+      closeCustomModal();
+      if (epList.length > 0) startSequentialDownload(epList, quality);
+    }
+
+    function parseCustomInput(input) {
+      const result = new Set();
+      input.split(',').forEach(part => {
+        const trimmed = part.trim();
+        if (trimmed.includes('-')) {
+          const [start, end] = trimmed.split('-').map(Number);
+          if (start && end) {
+            for (let i = start; i <= end; i++) result.add(i);
+          }
+        } else if (!isNaN(trimmed) && trimmed !== '') {
+          result.add(Number(trimmed));
+        }
+      });
+      return Array.from(result).sort((a, b) => a - b);
+    }
+
+    async function startSequentialDownload(episodes, quality = '720p') {
+      if (isDownloading) return alert('Download queue chal raha hai!');
+      isDownloading = true;
+
+      const toast = document.getElementById('downloadToast');
+      toast.classList.remove('hidden');
+
+      for (let i = 0; i < episodes.length; i++) {
+        const epIndex = episodes[i];
+        const masterUrl = await fetchEpisodeUrl(epIndex);
+        
+        if (masterUrl) {
+          const filename = `${currentShow.title}_Ep_${epIndex}_${quality}`;
+          try {
+            await processAndMergeMp4(masterUrl, quality, filename);
+          } catch (err) {
+            console.error(err);
+          }
+        }
+      }
+
+      isDownloading = false;
+      toast.classList.add('hidden');
+      alert('Sare Episodes MP4 mein Merge hokar Download ho gaye!');
+    }
+
+    async function handleSearch() {
+      const query = document.getElementById('searchInput').value.trim();
+      if (!query) return;
+
+      const container = document.getElementById('appContainer');
+      container.innerHTML = `<div class="text-center py-20 text-gray-400">Searching...</div>`;
+
+      try {
+        const targetUrl = `/searchservice/v1/search/${encodeURIComponent(query)}?page=0&size=20`;
+        const res = await fetch(buildUrl(targetUrl));
+        const data = await res.json();
+        const shows = data.data?.content || [];
+
+        container.innerHTML = `<h2 class="text-lg font-bold text-white mb-6">Search Results</h2>`;
+        const grid = document.createElement('div');
+        grid.className = 'grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-4';
+        shows.forEach(show => grid.appendChild(createShowCard(show)));
+        container.appendChild(grid);
+      } catch (err) {
+        container.innerHTML = `<div class="text-red-500 text-center py-10">Search failed.</div>`;
       }
     }
   </script>
